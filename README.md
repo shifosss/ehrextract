@@ -1,5 +1,10 @@
 # ehrextract
 
+[![PyPI](https://img.shields.io/pypi/v/ehrextract)](https://pypi.org/project/ehrextract/)
+[![Python](https://img.shields.io/pypi/pyversions/ehrextract)](https://pypi.org/project/ehrextract/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/shifosss/ehrextract/blob/main/LICENSE)
+[![tests](https://github.com/shifosss/ehrextract/actions/workflows/test.yml/badge.svg)](https://github.com/shifosss/ehrextract/actions/workflows/test.yml)
+
 Structured feature extraction from clinical notes. Three steps:
 
 1. **Bring your notes** — CSV, JSONL, JSON, XLSX, plain text, or a pandas
@@ -27,21 +32,15 @@ CSV, JSONL, JSON, XLSX, or Parquet — with one column per extracted field.
 
 ## Install
 
-Until the PyPI release, install from source (**current method**):
-
-```bash
-git clone https://github.com/shifosss/ehrextract
-pip install './ehrextract[hf]'          # or [openai], [anthropic]
-```
-
-Once published to PyPI:
-
 ```bash
 pip install ehrextract                  # core (~50 MB)
 pip install 'ehrextract[hf]'            # + torch + transformers + peft (~3 GB)
 pip install 'ehrextract[openai]'        # + openai SDK
 pip install 'ehrextract[anthropic]'     # + anthropic SDK
 ```
+
+Python ≥ 3.11. For a development install from a clone, see
+[CONTRIBUTING.md](https://github.com/shifosss/ehrextract/blob/main/CONTRIBUTING.md).
 
 ## 30-second example
 
