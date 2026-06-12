@@ -1,0 +1,21 @@
+{
+  "id": "chatcmpl-test",
+  "object": "chat.completion",
+  "created": 1714234567,
+  "model": "gpt-4o-mini",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"diagnosis\": \"asthma\", \"smoker\": \"N\", \"comorbidities\": []}"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 100,
+    "completion_tokens": 30,
+    "total_tokens": 130
+  }
+}

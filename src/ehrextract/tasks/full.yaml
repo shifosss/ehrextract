@@ -1,0 +1,180 @@
+name: full
+description: "Joint extraction from pediatric tube-feeding consultation notes: 16 Y/N comorbidity categories plus 4 clinical feeding and neurologic variables."
+prompt: |
+  You are a clinical language model trained to extract and classify medical information from consultation notes written by nurse practitioners in a pediatric tube-feeding (gastrostomy) program. The notes include detailed medical histories and indications for gastrostomy tube placement.
+
+  Your task is to:
+  1. Extract all underlying diagnoses and comorbidities mentioned in the note
+  2. Classify each condition into one or more of the predefined comorbidity categories
+  3. Identify if a Feeding/Swallowing Disorder (FSD) is present
+  4. Extract clinical feeding and neurologic variables
+
+  FEEDING/SWALLOWING DISORDER (FSD):
+  Mark as "Y" if the note indicates dysphagia, unsafe swallow, aspiration risk, oral aversion, or feeding inefficiency altering nutrition/hydration.
+
+  COMORBIDITY CATEGORIES:
+  1. Neurologic - Any central or neuromuscular condition (e.g., neurologic impairment, global developmental delay, intellectual disability, cerebral palsy, epilepsy, seizures, HIE, hydrocephalus, VP shunt, SMA, muscular dystrophy, hypotonia, stroke)
+  2. Genetic or syndromic - Any chromosomal, syndromic, or single-gene diagnosis (e.g., Down syndrome, 22q11.2 deletion, Rett syndrome, Noonan syndrome)
+  3. Prematurity - History of prematurity regardless of age (e.g., GA <37 weeks, ex-preterm, VLBW, ELBW)
+  4. Gastrointestinal/hepatopancreatic - Any GI, liver, or pancreatic disorder (e.g., GERD, esophagitis, EoE, esophageal atresia, TEF, malrotation, short gut, gastroparesis, biliary atresia, hepatitis, pancreatitis)
+  5. Renal or urologic - Any kidney or urinary tract disorder (e.g., CKD, hydronephrosis, VUR, neurogenic bladder, dialysis, renal transplant)
+  6. Cardiovascular - Any congenital or acquired heart condition (e.g., CHD, ASD, VSD, AVSD, TOF, cardiomyopathy, arrhythmia, pulmonary HTN, heart failure)
+  7. Respiratory - Any chronic or recurrent lung/airway condition (e.g., BPD, tracheostomy, OSA, asthma, ventilator dependence, CF, recurrent aspiration pneumonia)
+  8. Metabolic - Any inborn error of metabolism or mitochondrial disorder (e.g., urea cycle disorder, organic acidemia, FAOD, mitochondrial disease)
+  9. Endocrine - Any endocrine system disorder (e.g., diabetes, thyroid disease, adrenal insufficiency, pituitary disorders, CAH)
+  10. Hematology/oncology - Any hematologic or oncologic disorder (e.g., sickle cell, thalassemia, bleeding disorders, leukemia, lymphoma, solid tumors, bone marrow transplant)
+  11. Immunologic - Any immunodeficiency, autoimmune disease, or immunosuppressed state (e.g., primary immunodeficiency, lupus, IBD, post-transplant immunosuppression)
+  12. Mental Health - Psychiatric disorders (e.g., anxiety, depression, OCD, eating disorders, ADHD)
+  13. Developmental or behavioural - Developmental/behavioural disorders including ASD (e.g., autism spectrum disorder, severe behavioural dysregulation, oral aversion). IMPORTANT: Do NOT include global developmental delay (GDD) here - code it under Neurologic instead.
+  14. Musculoskeletal - Any musculoskeletal disorder (e.g., scoliosis, contractures, hip dysplasia, arthrogryposis, OI)
+  15. Infectious disease - Any acute or chronic infectious condition (e.g., pneumonia, UTI, HIV, hepatitis B, hepatitis C, chronic colonization such as Pseudomonas)
+
+  CLINICAL VARIABLES:
+  1. tube_feeding: Is the patient currently receiving tube feeding?
+     - "Y" if tube feeding via an NG (nasogastric), NJ (nasojejunal), or OG (orogastric) tube is present
+     - "N" if not mentioned or explicitly absent
+     - Exclude G-tube: this consultation is for G-tube placement, so the patient should not already have a G-tube
+     - NPO (nil per mouth) does not indicate tube feeding
+
+  2. oral_feeding: Is the patient currently receiving any oral feeds?
+     - "Y" if the patient currently takes food or liquids by mouth (full or partial oral feeds)
+     - "N" if the patient is nil by mouth, exclusively tube-fed, or has no current oral intake
+     - Failed oral trials (e.g., "trialed purées, not tolerated") count as N
+     - Single-occasion tastes with no nutritional contribution count as N
+     - Historical oral feeding that is no longer ongoing counts as N
+
+  3. aspiration_risk: Is there evidence of aspiration risk or unsafe swallow?
+     - "Y" if the note mentions aspiration, silent aspiration, unsafe swallow, dysphagia, thickened feeds required, or feeding-related aspiration pneumonia
+     - "N" if not mentioned or explicitly absent
+
+  4. ni_progressive_or_static: Decide in two steps.
+
+     Step 1 — Is neurologic impairment (NI) present? If no NI is mentioned or present, answer "N/A" and stop.
+
+     Step 2 — If NI is present, classify the trajectory by the underlying diagnosis, not by the observed clinical course in this note.
+     - "Static" for a non-progressive underlying diagnosis (e.g., cerebral palsy, static encephalopathy, hypoxic-ischemic injury). Cerebral palsy stays Static even when the note describes worsening function.
+     - "Progressive" for a progressive underlying diagnosis (e.g., progressive neuromuscular disease, degenerative neurologic disease).
+
+  INSTRUCTIONS:
+  - Extract only conditions or diagnoses that are current for the patient
+  - The following kinds of conditions or diagnoses should be marked as N:
+    - Conditions noted only in family or obstetric history (e.g., "mother has Type 1 diabetes")
+    - Fully resolved conditions with no current management, including past surgical history with no current sequelae (e.g., "TEF repair as neonate, no current GI issues")
+    - Diagnoses considered but ruled out, or conditions in active workup with no confirmed status at the time of the note
+    - Conditions inferred only from the medication list, with no diagnosis written (e.g., "on lansoprazole" without "GERD")
+    - Variants of uncertain significance from genetic testing not yet linked to a recognized syndrome
+    - Conditions named only as comparison or example (e.g., "unlike a typical CP presentation")
+  - Use exact medical terminology as written in the note
+  - Do not include medications, procedures, or treatments
+  - A single condition may belong to multiple categories
+  - Global developmental delay (GDD) should be classified as Neurologic, not Developmental or behavioural
+  - Base clinical variable answers only on information explicitly stated in the note
+
+  OUTPUT FORMAT:
+  Return ONLY valid JSON (no markdown, no extra text) in this exact format:
+  {
+    "fsd": "Y/N",
+    "neurologic": "Y/N",
+    "genetic_or_syndromic": "Y/N",
+    "prematurity": "Y/N",
+    "gastrointestinal_hepatopancreatic": "Y/N",
+    "renal_or_urologic": "Y/N",
+    "cardiovascular": "Y/N",
+    "respiratory": "Y/N",
+    "metabolic": "Y/N",
+    "endocrine": "Y/N",
+    "hematology_oncology": "Y/N",
+    "immunologic": "Y/N",
+    "mental_health": "Y/N",
+    "developmental_or_behavioural": "Y/N",
+    "musculoskeletal": "Y/N",
+    "infectious_disease": "Y/N",
+    "tube_feeding": "Y/N",
+    "oral_feeding": "Y/N",
+    "aspiration_risk": "Y/N",
+    "ni_progressive_or_static": "Progressive/Static/N/A"
+  }
+user_template: "Clinical note: {note}\n\nProvide the classification in JSON format:"
+generation:
+  max_new_tokens: 512
+fields:
+  fsd:
+    type: enum
+    description: "Feeding/swallowing disorder: dysphagia, unsafe swallow, aspiration risk, oral aversion, or feeding inefficiency altering nutrition/hydration."
+    values: ["Y", "N"]
+  neurologic:
+    type: enum
+    description: "Any central or neuromuscular condition (e.g., neurologic impairment, global developmental delay, cerebral palsy, epilepsy, HIE, hydrocephalus, SMA, hypotonia, stroke)."
+    values: ["Y", "N"]
+  genetic_or_syndromic:
+    type: enum
+    description: "Any chromosomal, syndromic, or single-gene diagnosis (e.g., Down syndrome, 22q11.2 deletion, Rett syndrome, Noonan syndrome)."
+    values: ["Y", "N"]
+  prematurity:
+    type: enum
+    description: "History of prematurity regardless of age (e.g., GA <37 weeks, ex-preterm, VLBW, ELBW)."
+    values: ["Y", "N"]
+  gastrointestinal_hepatopancreatic:
+    type: enum
+    description: "Any GI, liver, or pancreatic disorder (e.g., GERD, esophagitis, EoE, esophageal atresia, TEF, short gut, gastroparesis, biliary atresia, pancreatitis)."
+    values: ["Y", "N"]
+  renal_or_urologic:
+    type: enum
+    description: "Any kidney or urinary tract disorder (e.g., CKD, hydronephrosis, VUR, neurogenic bladder, dialysis, renal transplant)."
+    values: ["Y", "N"]
+  cardiovascular:
+    type: enum
+    description: "Any congenital or acquired heart condition (e.g., CHD, ASD, VSD, TOF, cardiomyopathy, arrhythmia, pulmonary HTN, heart failure)."
+    values: ["Y", "N"]
+  respiratory:
+    type: enum
+    description: "Any chronic or recurrent lung/airway condition (e.g., BPD, tracheostomy, OSA, asthma, ventilator dependence, CF, recurrent aspiration pneumonia)."
+    values: ["Y", "N"]
+  metabolic:
+    type: enum
+    description: "Any inborn error of metabolism or mitochondrial disorder (e.g., urea cycle disorder, organic acidemia, FAOD, mitochondrial disease)."
+    values: ["Y", "N"]
+  endocrine:
+    type: enum
+    description: "Any endocrine system disorder (e.g., diabetes, thyroid disease, adrenal insufficiency, pituitary disorders, CAH)."
+    values: ["Y", "N"]
+  hematology_oncology:
+    type: enum
+    description: "Any hematologic or oncologic disorder (e.g., sickle cell, thalassemia, bleeding disorders, leukemia, lymphoma, solid tumors, bone marrow transplant)."
+    values: ["Y", "N"]
+  immunologic:
+    type: enum
+    description: "Any immunodeficiency, autoimmune disease, or immunosuppressed state (e.g., primary immunodeficiency, lupus, IBD, post-transplant immunosuppression)."
+    values: ["Y", "N"]
+  mental_health:
+    type: enum
+    description: "Psychiatric disorders (e.g., anxiety, depression, OCD, eating disorders, ADHD)."
+    values: ["Y", "N"]
+  developmental_or_behavioural:
+    type: enum
+    description: "Developmental/behavioural disorders including ASD (e.g., autism spectrum disorder, severe behavioural dysregulation, oral aversion); global developmental delay codes under neurologic, not here."
+    values: ["Y", "N"]
+  musculoskeletal:
+    type: enum
+    description: "Any musculoskeletal disorder (e.g., scoliosis, contractures, hip dysplasia, arthrogryposis, OI)."
+    values: ["Y", "N"]
+  infectious_disease:
+    type: enum
+    description: "Any acute or chronic infectious condition (e.g., pneumonia, UTI, HIV, hepatitis B, hepatitis C, chronic colonization such as Pseudomonas)."
+    values: ["Y", "N"]
+  tube_feeding:
+    type: enum
+    description: "Y if tube feeding via an NG, NJ, or OG tube is currently present (G-tube excluded; NPO does not indicate tube feeding); N if not mentioned or explicitly absent."
+    values: ["Y", "N"]
+  oral_feeding:
+    type: enum
+    description: "Y if the patient currently takes food or liquids by mouth (full or partial oral feeds); N if nil by mouth, exclusively tube-fed, failed trials only, or no current oral intake."
+    values: ["Y", "N"]
+  aspiration_risk:
+    type: enum
+    description: "Y if the note mentions aspiration, silent aspiration, unsafe swallow, dysphagia, thickened feeds required, or feeding-related aspiration pneumonia; N if not mentioned or explicitly absent."
+    values: ["Y", "N"]
+  ni_progressive_or_static:
+    type: enum
+    description: "Trajectory of neurologic impairment by underlying diagnosis: Progressive, Static, or N/A when no neurologic impairment is present."
+    values: ["Progressive", "Static", "N/A"]

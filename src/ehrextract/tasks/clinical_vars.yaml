@@ -1,0 +1,55 @@
+name: clinical_vars
+description: "Extraction of four clinical feeding and neurologic variables from pediatric tube-feeding consultation notes."
+prompt: |
+  You are a clinical language model trained to extract specific clinical variables from consultation notes written by nurse practitioners in a pediatric tube-feeding (gastrostomy) program. The notes include detailed medical histories and indications for gastrostomy tube placement.
+
+  Your task is to extract the following four clinical variables from the note:
+
+  1. tube_feeding: Is the patient currently receiving or being considered for tube feeding?
+     - "Y" if tube feeding (via NG tube, G-tube, NJ tube, or similar) is present, ongoing, or planned
+     - "N" if not mentioned or explicitly absent
+
+  2. oral_feeding: Is the patient receiving any oral feeds?
+     - "Y" if the patient takes anything by mouth (full oral feeds, partial oral feeds, tastes, or trial feeds)
+     - "N" if the patient is nil by mouth or exclusively tube-fed with no oral intake
+
+  3. aspiration_risk: Is there evidence of aspiration risk or unsafe swallow?
+     - "Y" if the note mentions aspiration, silent aspiration, unsafe swallow, dysphagia, thickened feeds required, or feeding-related aspiration pneumonia
+     - "N" if not mentioned or explicitly absent
+
+  4. ni_progressive_or_static: If neurologic impairment (NI) is present, is it progressive or static?
+     - "Progressive" if the note describes a progressive neurologic condition (e.g., progressive neuromuscular disease, degenerative condition, worsening neurologic function)
+     - "Static" if the note describes a non-progressive or stable neurologic condition (e.g., cerebral palsy, static encephalopathy, hypoxic-ischemic injury with stable function)
+     - "N/A" if no neurologic impairment is mentioned or present
+
+  INSTRUCTIONS:
+  - Base your answers only on information explicitly stated in the note
+  - Do not infer or assume information not present in the note
+
+  Return ONLY valid JSON with the following schema (no markdown, no extra text):
+  {
+  "tube_feeding": "Y/N",
+  "oral_feeding": "Y/N",
+  "aspiration_risk": "Y/N",
+  "ni_progressive_or_static": "Progressive/Static/N/A"
+  }
+user_template: "Clinical note: {note}\n\nProvide the classification in JSON format:"
+generation:
+  max_new_tokens: 300
+fields:
+  tube_feeding:
+    type: enum
+    description: "Y if tube feeding (via NG tube, G-tube, NJ tube, or similar) is present, ongoing, or planned; N if not mentioned or explicitly absent."
+    values: ["Y", "N"]
+  oral_feeding:
+    type: enum
+    description: "Y if the patient takes anything by mouth (full, partial, tastes, or trial feeds); N if nil by mouth or exclusively tube-fed with no oral intake."
+    values: ["Y", "N"]
+  aspiration_risk:
+    type: enum
+    description: "Y if the note mentions aspiration, silent aspiration, unsafe swallow, dysphagia, thickened feeds required, or feeding-related aspiration pneumonia; N if not mentioned or explicitly absent."
+    values: ["Y", "N"]
+  ni_progressive_or_static:
+    type: enum
+    description: "Trajectory of neurologic impairment: Progressive, Static, or N/A when no neurologic impairment is mentioned or present."
+    values: ["Progressive", "Static", "N/A"]

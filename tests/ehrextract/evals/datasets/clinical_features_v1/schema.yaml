@@ -1,0 +1,16 @@
+name: clinical_features_v1
+description: Extract a small set of structured demographic and history fields from a clinical note.
+fields:
+  age:
+    type: integer
+    description: Patient age in years
+  primary_complaint:
+    type: string
+    description: Brief noun phrase describing the primary reason for the encounter
+  has_diabetes:
+    type: boolean
+    description: True if the note states the patient has diabetes (any type, any control state); false otherwise
+  smoking_status:
+    type: enum
+    values: [Never, Former, Current, Unknown]
+    description: Smoking history at the time of the encounter

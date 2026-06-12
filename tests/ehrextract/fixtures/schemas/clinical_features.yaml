@@ -1,0 +1,15 @@
+name: clinical_features
+description: Extract structured clinical variables from a note.
+fields:
+  diagnosis:
+    type: string
+    description: Primary diagnosis as stated in the note
+  age:
+    type: integer
+    optional: true
+  smoker:
+    type: enum
+    values: [Y, N, Unknown]
+  comorbidities:
+    type: list
+    item_type: string

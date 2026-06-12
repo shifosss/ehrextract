@@ -1,0 +1,185 @@
+ehrextract
+Copyright (c) 2026 Chen Zhang, Yibing Xia, Sanjay Mahant, Nathan Taback,
+The Hospital for Sick Children, and the University of Toronto.
+All rights reserved.
+
+This product is licensed under the Apache License, Version 2.0 (the
+"License"). You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+The following terms supplement, but do not override, the License.
+
+================================================================
+1. Authors and institutions
+================================================================
+
+ehrextract was created by:
+
+    Chen Zhang (lead author)
+    Yibing Xia (co-author)
+    Sanjay Mahant, MD (supervisor; The Hospital for Sick Children)
+    Nathan Taback, PhD (supervisor; University of Toronto)
+
+at:
+
+    The Hospital for Sick Children (SickKids), Toronto, Canada
+    University of Toronto, Toronto, Canada
+
+================================================================
+2. Trademark and endorsement
+================================================================
+
+Neither the names "The Hospital for Sick Children", "SickKids",
+"University of Toronto", "U of T", nor the names of any of the authors
+listed above may be used to endorse or promote products derived from
+this Software, or to imply institutional review, approval, or
+validation of any derivative work, without prior written permission
+from the relevant institution or individual.
+
+The presence of these names in copyright notices, attribution
+documentation, and citations is permitted and required by the License;
+endorsement of derivative products is not.
+
+================================================================
+3. Not a medical device
+================================================================
+
+ehrextract IS NOT A MEDICAL DEVICE. It has not been cleared, certified,
+or approved by:
+
+    - the U.S. Food and Drug Administration (FDA),
+    - Health Canada,
+    - the European Medicines Agency (EMA), or
+    - any other regulatory body.
+
+It has not been validated for use in clinical decision-making, patient
+diagnosis, treatment planning, triage, prognostic assessment, or any
+other application that affects patient care. Users who deploy
+ehrextract in any setting where its outputs may influence clinical
+decisions do so entirely at their own risk and assume sole
+responsibility for any harm that results.
+
+================================================================
+4. Privacy, PHI, and regulatory compliance
+================================================================
+
+ehrextract does not detect Protected Health Information (PHI). The
+egress-warning mechanism (consent.py) is informational only -- it is
+NOT a privacy compliance control and MUST NOT be relied upon as such.
+
+Users are solely responsible for ensuring that their use of ehrextract
+complies with all applicable privacy, data-protection, and
+data-residency laws, including but not limited to:
+
+    - the Health Insurance Portability and Accountability Act (HIPAA),
+    - the Personal Health Information Protection Act (PHIPA, Ontario),
+    - the Personal Information Protection and Electronic Documents
+      Act (PIPEDA, Canada),
+    - the General Data Protection Regulation (GDPR, EU),
+
+and with the policies of any institutional Research Ethics Board (REB)
+or Institutional Review Board (IRB) governing the data they process.
+
+Routing PHI through any third-party API requires, at minimum, a signed
+Business Associate Agreement (or local equivalent) and Zero-Data-
+Retention enrollment with that provider. Users must verify these
+arrangements independently; the listing of a provider in ehrextract's
+documentation is not a representation of compliance.
+
+================================================================
+5. Acceptable-use restrictions
+================================================================
+
+The authors and institutions named above expressly disclaim and do not
+license use of ehrextract for any of the following purposes:
+
+    - re-identification of de-identified or pseudonymized records;
+    - mass surveillance of patient populations or individuals;
+    - insurance underwriting, eligibility determination, or claims
+      adjudication;
+    - employment or admissions decisions;
+    - immigration or border-screening decisions;
+    - law-enforcement intelligence-gathering;
+    - any application that produces or supports decisions of legal,
+      financial, or material consequence to an identified individual
+      without that individual's informed consent.
+
+This list is non-exhaustive. Any use that could reasonably be expected
+to cause disparate harm to individuals or groups is outside the scope
+of the authors' and institutions' intent.
+
+================================================================
+6. Research use and output validation
+================================================================
+
+ehrextract uses large language models that may produce hallucinated,
+incomplete, or systematically biased outputs. The "parse_success"
+column in ehrextract output indicates that the model's response was
+syntactically valid against the schema; it does NOT indicate that the
+extracted values are correct.
+
+Any use of ehrextract output as research data requires human review of
+every row before that data is treated as observed fact. Publications,
+posters, abstracts, or reports that present ehrextract output as
+ground-truth without per-row human validation are misuses of the
+software and are not endorsed by the authors or institutions.
+
+================================================================
+7. Bias and fairness
+================================================================
+
+ehrextract has not been audited for demographic, linguistic, or
+clinical-context bias. The underlying language models are known to
+exhibit disparate performance across populations defined by race,
+ethnicity, gender, primary language, age, socioeconomic status, and
+condition prevalence.
+
+ehrextract MUST NOT be used in triage, resource allocation, eligibility
+determination, or any other setting where disparate model performance
+across demographic subgroups could cause unequal access to care or
+disparate harm.
+
+================================================================
+8. Third-party adapters and models
+================================================================
+
+ehrextract supports loading external LoRA adapters via the --adapter
+flag and external model weights via --model. The authors and
+institutions do NOT host, vet, validate, or vouch for any third-party
+adapter or model. Use of an adapter does not imply that the adapter's
+training data, license, or output behaviour has been reviewed.
+
+Distributors of LoRA adapters or fine-tuned weights that advertise
+compatibility with ehrextract are responsible for the licensing and
+data-handling claims they make about their own artifacts.
+
+================================================================
+9. Maintenance and security
+================================================================
+
+ehrextract is research-grade software released as a public-good
+artifact. The authors make NO commitment to:
+
+    - respond to issues or pull requests within any timeframe,
+    - provide security patches for reported vulnerabilities,
+    - maintain compatibility with future versions of dependencies,
+    - support deployment in production environments, or
+    - continue development beyond the published version.
+
+Operators who deploy ehrextract are solely responsible for monitoring
+its dependencies, patching vulnerabilities, and assessing fitness for
+their environment.
+
+================================================================
+10. No warranty
+================================================================
+
+EHREXTRACT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED. SEE SECTIONS 7 AND 8 OF THE APACHE LICENSE 2.0 FOR THE
+FULL DISCLAIMER OF WARRANTY AND LIMITATION OF LIABILITY.
+
+================================================================
+
+For questions about acceptable use or institutional permission, contact
+the corresponding author through the project repository.

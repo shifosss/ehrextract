@@ -1,0 +1,5 @@
+{"note_id": "n1", "age": 45, "primary_complaint": "substernal chest pain", "has_diabetes": false, "smoking_status": "Current"}
+{"note_id": "n2", "age": 62, "primary_complaint": "diabetes follow-up", "has_diabetes": true, "smoking_status": "Former"}
+{"note_id": "n3", "age": 8, "primary_complaint": "recurrent abdominal discomfort", "has_diabetes": false, "smoking_status": "Never"}
+{"note_id": "n4", "age": 78, "primary_complaint": "shortness of breath", "has_diabetes": true, "smoking_status": "Former"}
+{"note_id": "n5", "age": 32, "primary_complaint": "persistent headache", "has_diabetes": false, "smoking_status": "Never"}
