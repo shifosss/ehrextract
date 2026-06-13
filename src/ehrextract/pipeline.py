@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 import pandas as pd
 
+from ehrextract import constrained as _constrained
 from ehrextract.io import load_notes, validate_output_path, write_results
 from ehrextract.providers import (
     GenerationConfig,
@@ -181,6 +182,28 @@ def parse_and_validate(raw: str, schema: Schema):
     return fields, errors
 
 
+REPAIR_TEMPLATE = (
+    "Your previous response could not be used. Problems:\n"
+    "{errors}\n"
+    "Return ONLY the corrected JSON object matching the required shape -- "
+    "no commentary, no markdown fences."
+)
+
+
+def _render_errors(errors: list[FieldError]) -> str:
+    return "\n".join(f"- {e.field}:{e.code}:{e.detail}" for e in errors)
+
+
+def _sum_usage(total: dict[str, int] | None, extra: dict[str, int] | None) -> dict[str, int] | None:
+    """Element-wise token-count sum across repair attempts (the honest cost number)."""
+    if total is None:
+        return dict(extra) if extra else None
+    if extra:
+        for k, v in extra.items():
+            total[k] = total.get(k, 0) + v
+    return total
+
+
 def build_default_prompt(schema: Schema) -> str:
     """Fallback system prompt for tasks that do not define one."""
     prompt = "Extract the following fields from the clinical note."
@@ -254,6 +277,16 @@ def resolve_adapter_prompt(
     return task
 
 
+def _merge_generation(task: Task, generation: GenerationConfig | dict | None) -> GenerationConfig:
+    """Precedence: GenerationConfig defaults < task.generation < `generation` arg."""
+    merged: dict[str, Any] = dict(task.generation)
+    if isinstance(generation, GenerationConfig):
+        merged.update(asdict(generation))
+    elif isinstance(generation, dict):
+        merged.update(generation)
+    return GenerationConfig(**merged)
+
+
 @dataclass(frozen=True)
 class ExtractionResult:
     note_id: str | int
@@ -263,6 +296,7 @@ class ExtractionResult:
     raw_response: str
     finish_reason: str | None
     usage: dict[str, int] | None
+    repair_attempts: int = 0
 
 
 def _normalize_notes(notes, *, id_column: str, text_column: str) -> pd.DataFrame:
@@ -318,16 +352,19 @@ class Extractor:
         text_column: str = "note_text",
         on_egress: Literal["warn", "silent"] = "warn",
         max_retries: int = 3,
+        max_repairs: int = 0,
     ):
+        if max_repairs < 0:
+            raise ValueError(f"max_repairs must be >= 0, got {max_repairs}")
+        self.max_repairs = max_repairs
         self.provider = provider
         self.task = task
-        # Precedence: GenerationConfig defaults < task.generation < `generation` arg.
-        merged: dict[str, Any] = dict(task.generation)
-        if isinstance(generation, GenerationConfig):
-            merged.update(asdict(generation))
-        elif isinstance(generation, dict):
-            merged.update(generation)
-        self.generation = GenerationConfig(**merged)
+        self.generation = _merge_generation(task, generation)
+        if self.generation.constrained and not getattr(provider, "supports_constrained", False):
+            logger.info(
+                "provider %r does not support constrained decoding; proceeding unconstrained",
+                provider.name,
+            )
         self.id_column = id_column
         self.text_column = text_column
         self.on_egress = on_egress
@@ -368,6 +405,21 @@ class Extractor:
             self.task, text, schema_native=self.provider.uses_schema_natively
         )
         outcome = self._generate_with_retry(messages)
+        return self._finalize(messages, outcome, note_id)
+
+    def _finalize(
+        self,
+        messages: list[dict],
+        outcome: ProviderResponse | Exception,
+        note_id: str | int,
+    ) -> ExtractionResult:
+        """Parse/validate a provider outcome, repairing up to max_repairs times.
+
+        Repair fires only on parse/validation failure, never on provider
+        errors or empty notes. ``repair_attempts`` counts repair generations
+        attempted, including one that itself failed at the provider level
+        (in which case the previous attempt's parse result is kept).
+        """
         if isinstance(outcome, Exception):
             return ExtractionResult(
                 note_id=note_id,
@@ -378,15 +430,36 @@ class Extractor:
                 finish_reason="error",
                 usage=None,
             )
-        fields, errors = parse_and_validate(outcome.text, self.task.schema)
+        current = outcome
+        fields, errors = parse_and_validate(current.text, self.task.schema)
+        usage = _sum_usage(None, current.usage)
+        repair_attempts = 0
+        while errors and repair_attempts < self.max_repairs:
+            repair_messages = messages + [
+                {"role": "assistant", "content": current.text},
+                {"role": "user", "content": REPAIR_TEMPLATE.format(errors=_render_errors(errors))},
+            ]
+            retry_outcome = self._generate_with_retry(repair_messages)
+            repair_attempts += 1
+            if isinstance(retry_outcome, Exception):
+                logger.warning(
+                    "repair attempt %d for note %r failed at the provider level: %s; "
+                    "keeping the previous result",
+                    repair_attempts, note_id, retry_outcome,
+                )
+                break
+            current = retry_outcome
+            fields, errors = parse_and_validate(current.text, self.task.schema)
+            usage = _sum_usage(usage, current.usage)
         return ExtractionResult(
             note_id=note_id,
             fields=fields,
             parse_success=(len(errors) == 0),
             validation_errors=errors,
-            raw_response=outcome.text,
-            finish_reason=outcome.finish_reason,
-            usage=outcome.usage,
+            raw_response=current.text,
+            finish_reason=current.finish_reason,
+            usage=usage,
+            repair_attempts=repair_attempts,
         )
 
     def _normalize_input(self, notes) -> pd.DataFrame:
@@ -403,18 +476,27 @@ class Extractor:
             usage=None,
         )
 
-    def run(self, notes, *, max_concurrency: int | None = None) -> pd.DataFrame:
+    def run(
+        self, notes, *, max_concurrency: int | None = None, batch: bool = False
+    ) -> pd.DataFrame:
         self._check_egress()
         df = self._normalize_input(notes)
         if df.empty:
             return self._empty_result_frame()
         if df[self.id_column].duplicated().any():
             logger.warning("input contains duplicate values in id column %r", self.id_column)
+        if max_concurrency is not None and max_concurrency < 1:
+            raise ValueError(f"max_concurrency must be >= 1, got {max_concurrency}")
+
+        if batch:
+            if not getattr(self.provider, "supports_batch", False):
+                raise ValueError(
+                    f"provider {self.provider.name!r} does not support batch mode"
+                )
+            return self._run_batch(df, max_concurrency)
 
         if max_concurrency is None:
             max_concurrency = self.provider.default_concurrency
-        elif max_concurrency < 1:
-            raise ValueError(f"max_concurrency must be >= 1, got {max_concurrency}")
         if (
             self.provider.egress_destination() is None
             and max_concurrency > self.provider.default_concurrency
@@ -457,10 +539,66 @@ class Extractor:
 
         return self._results_to_frame(results)
 
+    def _run_batch(self, df: pd.DataFrame, max_concurrency: int | None) -> pd.DataFrame:
+        """One provider-side batch round-trip for all non-empty rows.
+
+        Empty-note rows never leave the machine. Failed rows are repaired
+        (when max_repairs > 0) via synchronous generate() calls, threaded at
+        the resolved concurrency -- a second batch round-trip is not worth
+        the latency for the typically small failure count.
+        """
+        results: list[ExtractionResult | None] = [None] * len(df)
+        live_indices: list[int] = []
+        batch_messages: list[list[dict]] = []
+        for i in range(len(df)):
+            row = df.iloc[i]
+            reason = _empty_note_reason(row[self.text_column])
+            if reason is not None:
+                results[i] = self._empty_note_result(row[self.id_column], reason)
+                continue
+            live_indices.append(i)
+            batch_messages.append(build_messages(
+                self.task, str(row[self.text_column]),
+                schema_native=self.provider.uses_schema_natively,
+            ))
+
+        if live_indices:
+            outcomes = self.provider.generate_batch(
+                batch_messages, self.generation, json_schema=self._json_schema
+            )
+            if len(outcomes) != len(live_indices):
+                raise RuntimeError(
+                    f"provider {self.provider.name!r} returned {len(outcomes)} batch "
+                    f"results for {len(live_indices)} requests"
+                )
+
+            def _finalize_at(k: int):
+                i = live_indices[k]
+                note_id = df.iloc[i][self.id_column]
+                return i, self._finalize(batch_messages[k], outcomes[k], note_id)
+
+            if self.max_repairs > 0:
+                workers = max_concurrency or self.provider.default_concurrency
+                with ThreadPoolExecutor(max_workers=workers) as ex:
+                    futures = [ex.submit(_finalize_at, k) for k in range(len(live_indices))]
+                    try:
+                        for fut in as_completed(futures):
+                            i, r = fut.result()
+                            results[i] = r
+                    except BaseException:
+                        ex.shutdown(wait=True, cancel_futures=True)
+                        raise
+            else:
+                for k in range(len(live_indices)):
+                    i, r = _finalize_at(k)
+                    results[i] = r
+
+        return self._results_to_frame(results)
+
     def _empty_result_frame(self) -> pd.DataFrame:
         cols = [self.id_column, *self.task.schema.field_names(),
                 "parse_success", "validation_errors", "raw_response",
-                "finish_reason", "input_tokens", "output_tokens"]
+                "finish_reason", "repair_attempts", "input_tokens", "output_tokens"]
         return pd.DataFrame({c: [] for c in cols})
 
     def _results_to_frame(self, results: list) -> pd.DataFrame:
@@ -477,6 +615,7 @@ class Extractor:
             # Full text on failure for debugging, empty on success to keep output clean.
             row["raw_response"] = "" if r.parse_success else r.raw_response
             row["finish_reason"] = r.finish_reason
+            row["repair_attempts"] = r.repair_attempts
             row["input_tokens"] = (r.usage or {}).get("input_tokens")
             row["output_tokens"] = (r.usage or {}).get("output_tokens")
             rows.append(row)
@@ -501,6 +640,8 @@ def extract(
     on_egress: Literal["warn", "silent"] = "warn",
     trust_remote_code: bool = False,
     dtype: str | None = "bfloat16",
+    max_repairs: int = 0,
+    batch: bool = False,
 ) -> pd.DataFrame:
     """One-call extraction: resolve task, load notes, build provider, run, optionally write."""
     # 1. Resolve the task.
@@ -513,6 +654,12 @@ def extract(
         raise ValueError(f"model is required for provider {provider!r}")
     if adapter is not None and provider != "huggingface":
         raise ValueError("adapter is only supported with provider='huggingface'")
+    if batch and provider == "huggingface":
+        # Rejected before the (minutes-long) model load, like every usage error.
+        raise ValueError(
+            "batch mode is not supported with provider='huggingface' "
+            "(supported: openai, anthropic)"
+        )
 
     task = resolve_adapter_prompt(task, adapter, prompt)
 
@@ -522,6 +669,10 @@ def extract(
     notes_df = _normalize_notes(notes, id_column=id_column, text_column=text_column)
     if output is not None:
         validate_output_path(output)
+    if provider == "huggingface" and _merge_generation(task, generation).constrained:
+        # Same fail-fast rationale: a missing optional dependency must error
+        # in seconds, not after a multi-minute model load.
+        _constrained._require_lmformatenforcer()
 
     # 4. Build the provider.
     kwargs: dict[str, Any] = {"model": model}
@@ -544,8 +695,9 @@ def extract(
         id_column=id_column,
         text_column=text_column,
         on_egress=on_egress,
+        max_repairs=max_repairs,
     )
-    df = extractor.run(notes_df, max_concurrency=max_concurrency)
+    df = extractor.run(notes_df, max_concurrency=max_concurrency, batch=batch)
     if output is not None:
         write_results(df, output)
     return df

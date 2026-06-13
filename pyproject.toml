@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ehrextract"
-version = "0.2.0"
+version = "0.3.0"
 description = "Structured feature extraction from clinical notes"
 readme = "README.md"
 license = "Apache-2.0"
@@ -37,12 +37,14 @@ hf = [
     "transformers>=4.56",
     "peft>=0.10",
     "accelerate>=0.30",
+    "lm-format-enforcer>=0.11.3,<0.12",
 ]
-openai = ["openai>=1.0"]
-anthropic = ["anthropic>=0.30"]
+openai = ["openai>=1.35"]
+anthropic = ["anthropic>=0.42"]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
+    "lm-format-enforcer>=0.11.3,<0.12",
 ]
 
 [project.scripts]

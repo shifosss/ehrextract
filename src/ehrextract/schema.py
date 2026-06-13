@@ -269,6 +269,8 @@ def _check_generation(generation: dict, source: str) -> dict[str, Any]:
         if not isinstance(v, list) or not all(isinstance(s, str) for s in v):
             raise SchemaError(f"{source}: generation.stop must be a list of strings")
         checked["stop"] = tuple(v)
+    if "constrained" in checked and not isinstance(checked["constrained"], bool):
+        raise SchemaError(f"{source}: generation.constrained must be a boolean")
     return checked
 
 

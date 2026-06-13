@@ -69,7 +69,12 @@ df = extract(
 The input needs a `note_text` column (configurable via `--text-column`); a
 `note_id` column is added automatically when absent. The output has one
 column per task field plus `parse_success`, `validation_errors`,
-`raw_response`, `finish_reason`, and token counts.
+`raw_response`, `finish_reason`, `repair_attempts`, and token counts.
+
+On API providers, `--batch` submits the whole run as one provider-side
+batch at 50% API cost, and `--max-repairs N` re-prompts the model with the
+exact field errors when a response fails to parse or validate. See
+[`quickstart.md`](quickstart.md).
 
 ## Built-in tasks
 
@@ -83,12 +88,13 @@ Built-in tasks ship inside the package; `--task <name>` works without any
 extra files. Define your own task in YAML — see
 [`schema-reference.md`](schema-reference.md).
 
-> **Note on the `full` task.** The research pipeline that produced the
-> published evaluation numbers for the joint 20-field task used constrained
-> JSON decoding to force the output shape. ehrextract v0.2.0 does **not**
-> constrain decoding (planned as a future feature), so `full`-task outputs
-> can diverge from the published numbers on hard notes — watch the
-> `parse_success` and `validation_errors` columns.
+> **Note on the `full` task.** The `full` task enables constrained JSON
+> decoding by default on the local HuggingFace provider — the same
+> mechanism the research pipeline used for the published joint-task
+> numbers, forcing structurally valid, schema-conformant output at the
+> token level. It requires the `[hf]` extra (which includes
+> `lm-format-enforcer`); disable it with `--no-constrained`. API providers
+> ignore the setting (Anthropic already forces the schema via tool-use).
 
 ## Data handling
 

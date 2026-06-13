@@ -52,6 +52,22 @@ extract(..., on_egress="silent")            # library
 Extractor(provider, task, on_egress="silent")
 ```
 
+## Batch mode and server-side retention
+
+`--batch` sends note text to the same destination as a synchronous run,
+but as a *stored* batch object, which changes the retention picture:
+
+- **OpenAI** stores the uploaded input file and the output/error files.
+  ehrextract deletes all three best-effort after retrieving the results
+  (a failed deletion logs a WARNING and the file ids); verify deletion if
+  your data-handling agreement requires it.
+- **Anthropic** retains batch results for about 29 days; there is no
+  deletion API. Factor that window into any PHI decision.
+
+The repair loop (`--max-repairs`) re-sends the note text to the provider
+on every repair attempt — the egress decision you made for the first
+attempt applies to each retry.
+
 ## Outputs can contain PHI too
 
 Extracted field values derive from the notes, and the `raw_response`

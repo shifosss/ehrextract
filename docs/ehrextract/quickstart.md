@@ -97,7 +97,7 @@ Output format follows the `--output` extension: `.csv`, `.jsonl`, `.json`,
 `.xlsx`, `.parquet`. Columns: the id column, one column per task field,
 then `parse_success`, `validation_errors`, `raw_response` (full model text
 when parsing failed, empty when it succeeded), `finish_reason`,
-`input_tokens`, `output_tokens`. `.jsonl`/`.json` outputs carry real JSON
+`repair_attempts`, `input_tokens`, `output_tokens`. `.jsonl`/`.json` outputs carry real JSON
 types — booleans and numbers stay typed, missing values become `null`,
 and non-ASCII text is written unescaped.
 
@@ -227,6 +227,89 @@ extract(..., on_egress="silent")
 The local HuggingFace provider never triggers the notice — data stays on
 your machine. Read [`data-handling.md`](data-handling.md) before sending
 notes that may contain PHI to any API.
+
+## Constrained decoding (HuggingFace provider)
+
+With `generation.constrained: true` (task YAML) or `--constrained`,
+generation is token-constrained to the task's JSON Schema via
+lm-format-enforcer: the model *cannot* emit anything but a structurally
+valid, schema-conformant JSON object — exact keys, enum fields limited to
+their allowed values. The built-in `full` task enables it by default,
+paired with `repetition_penalty: 1.0` (its validated configuration; the
+enforcer makes repetition penalties unnecessary).
+
+Details that matter in practice:
+
+- HuggingFace provider only. Other providers log one INFO line and proceed
+  unconstrained (Anthropic already forces the schema via tool-use).
+- Requires `lm-format-enforcer`, included in `pip install 'ehrextract[hf]'`.
+  A missing install fails fast — before the model loads — with the fix in
+  the error message. Escape hatch: `--no-constrained`.
+- The first constrained generation scans the tokenizer vocabulary once
+  (seconds on large vocabularies); later notes reuse the scan.
+- The only remaining failure mode is truncation: if `max_new_tokens` runs
+  out, the JSON cannot be closed and the row reports
+  `finish_reason == "length"`. Raise `--max-new-tokens` — a repair loop
+  would just truncate again.
+- Constrained output starts at `{` from the first token, so thinking-model
+  preambles (`<think>`) are suppressed entirely.
+
+## Batch mode (API providers)
+
+`--batch` (or `extract(batch=True)`) submits the whole input as **one**
+provider-side batch — an OpenAI Batch or an Anthropic Message Batch — at
+**50% of the synchronous API price**:
+
+```bash
+ehrextract --task clinical_vars \
+  --provider anthropic --model claude-sonnet-4-5 --api-key-env ANTHROPIC_API_KEY \
+  --input notes.csv --output results.csv --batch
+```
+
+Semantics:
+
+- **Blocking.** The process polls until the batch finishes: typically
+  under an hour on Anthropic, up to 24 h on OpenAI. On a scheduler, set
+  the wall time accordingly.
+- The **batch id is logged at INFO immediately after creation** and on
+  every poll. If the process dies mid-poll, nothing is lost: results stay
+  retrievable by id (OpenAI keeps the output file; Anthropic retains
+  results for 29 days). Manual retrieval:
+
+  ```python
+  # OpenAI
+  batch = client.batches.retrieve("batch_...")
+  text = client.files.content(batch.output_file_id).text
+  # Anthropic
+  for entry in client.messages.batches.results("msgbatch_..."):
+      print(entry.custom_id, entry.result.type)
+  ```
+
+- Per-request failures become normal `provider_error` rows; only
+  batch-level failures (a rejected submission, a `failed`/`expired`
+  status) abort the run, always with the batch id in the message.
+- Rows with empty note text never leave the machine, exactly as in
+  synchronous mode, and the egress notice applies unchanged.
+- HuggingFace + `--batch` is a usage error (exit 2). Generic
+  OpenAI-compatible servers (vLLM, Ollama, Together) do not implement
+  `/v1/batches` — the run fails loudly at submission.
+- API caps apply (OpenAI: 50k requests / 200 MB; Anthropic: 100k / 256 MB);
+  ehrextract does not chunk in v0.3.
+
+## Repair on parse failure
+
+`--max-repairs N` (default **0** — off) re-prompts the model when a
+response fails to parse or validate: the failed output is echoed back as
+an assistant turn followed by the exact `field:code:detail` errors and an
+instruction to return only the corrected JSON. Up to N repair rounds per
+note; the `repair_attempts` output column records how many ran, and the
+token columns sum all attempts (the honest cost number).
+
+Caveats: each repair re-sends the note text (cost — and egress, on API
+providers), so it is opt-in; provider errors and empty notes are never
+repaired; under constrained decoding, failures are truncation — raise
+`--max-new-tokens` instead. Batch runs repair their failed rows with
+synchronous calls after the batch returns.
 
 ## CLI exit codes
 

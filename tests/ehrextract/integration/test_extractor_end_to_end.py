@@ -2,6 +2,7 @@
 
 import json
 import logging
+import sys
 import threading
 import time
 
@@ -116,6 +117,7 @@ def test_run_with_empty_list_returns_empty_frame(mock_provider_cls):
     assert len(out) == 0
     assert "diagnosis" in out.columns
     assert "parse_success" in out.columns
+    assert "repair_attempts" in out.columns
 
 
 def test_raw_response_empty_on_success(mock_provider_cls):
@@ -174,7 +176,7 @@ def test_output_dataframe_columns(mock_provider_cls):
         "note_id", "diagnosis", "smoker",
         "parse_success", "validation_errors",
         "raw_response", "finish_reason",
-        "input_tokens", "output_tokens",
+        "repair_attempts", "input_tokens", "output_tokens",
     }
     assert expected.issubset(set(out.columns))
 
@@ -422,3 +424,29 @@ def test_server_error_500_retried_with_jittered_backoff(mock_provider_cls, monke
     assert 1.0 <= sleeps[0] < 1.5  # 2**0 + uniform(0, 0.5)
     assert 2.0 <= sleeps[1] < 2.5  # 2**1 + uniform(0, 0.5)
     assert out["finish_reason"].iloc[0] == "error"
+
+
+# --- v0.3: constrained-decoding pipeline guards ---
+
+
+def test_constrained_ignored_with_info_for_non_supporting_provider(mock_provider_cls, caplog):
+    p = mock_provider_cls([VALID])
+    with caplog.at_level(logging.INFO, logger="ehrextract.pipeline"):
+        e = Extractor(p, _task(), generation={"constrained": True}, on_egress="silent")
+        result = e.run_one("note")
+    assert result.parse_success is True
+    msgs = [r.getMessage() for r in caplog.records if "constrained" in r.getMessage()]
+    assert len(msgs) == 1
+    assert "'mock'" in msgs[0]
+
+
+def test_extract_constrained_hf_fails_fast_before_provider_build(monkeypatch):
+    monkeypatch.setitem(sys.modules, "lmformatenforcer", None)
+    monkeypatch.setattr(
+        pipeline, "load_provider", lambda *a, **k: pytest.fail("provider must not be built")
+    )
+    with pytest.raises(ImportError, match=r"ehrextract\[hf\]"):
+        pipeline.extract(
+            "note", _task(), provider="huggingface", model="dummy",
+            generation={"constrained": True},
+        )

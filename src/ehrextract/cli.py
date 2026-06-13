@@ -71,6 +71,19 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--top-p", type=float)
     parser.add_argument("--repetition-penalty", type=float)
     parser.add_argument(
+        "--constrained", action=argparse.BooleanOptionalAction, default=None,
+        help="Constrained JSON decoding (HF provider only); overrides the task default",
+    )
+    parser.add_argument(
+        "--max-repairs", type=int, default=0,
+        help="Re-prompt on parse/validation failure up to N times (default 0: off)",
+    )
+    parser.add_argument(
+        "--batch", action="store_true",
+        help="API providers only -- submit one provider-side batch (50%% cost, "
+             "blocking poll until it completes)",
+    )
+    parser.add_argument(
         "--trust-remote-code", action="store_true",
         help="HF only -- pass trust_remote_code=True to transformers loaders",
     )
@@ -92,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
         "temperature": args.temperature,
         "top_p": args.top_p,
         "repetition_penalty": args.repetition_penalty,
+        "constrained": args.constrained,
     }
     generation = {k: v for k, v in overrides.items() if v is not None} or None
 
@@ -122,6 +136,8 @@ def main(argv: list[str] | None = None) -> int:
             on_egress="silent" if args.ack_egress else "warn",
             trust_remote_code=args.trust_remote_code,
             dtype=args.dtype,
+            max_repairs=args.max_repairs,
+            batch=args.batch,
         )
     except (SchemaError, FileNotFoundError, ValueError) as e:
         print(f"ehrextract: error: {e}", file=sys.stderr)

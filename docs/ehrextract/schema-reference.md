@@ -74,17 +74,19 @@ fields:
 | `top_p` | unset | |
 | `repetition_penalty` | 1.0 | HuggingFace only |
 | `stop` | none | List of stop strings (OpenAI-compatible only) |
+| `constrained` | false | HuggingFace only -- token-constrained JSON decoding (see [`quickstart.md`](quickstart.md)); other providers log one INFO and ignore it. Validated pairing: `repetition_penalty: 1.0` |
 
 Values are type-checked at load time: numeric keys must be numbers (not
-booleans) and `stop` must be a list of strings; unknown keys raise an
-error listing the valid ones.
+booleans), `constrained` must be a strict boolean, and `stop` must be a
+list of strings; unknown keys raise an error listing the valid ones.
 
 Precedence, lowest to highest: `GenerationConfig` defaults < the task
 file's `generation` block < the `generation=` argument to
 `Extractor`/`extract()` (a dict overrides per-key; a full
 `GenerationConfig` replaces everything) and the CLI flags
 `--max-new-tokens` / `--temperature` / `--top-p` /
-`--repetition-penalty` (only explicitly passed flags override).
+`--repetition-penalty` / `--constrained` / `--no-constrained` (only
+explicitly passed flags override).
 
 ## How the schema is used
 

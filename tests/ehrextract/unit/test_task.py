@@ -79,7 +79,10 @@ def test_load_full_builtin():
         "Progressive", "Static", "N/A",
     )
     assert t.user_template == TRAINING_USER_TEMPLATE
-    assert t.generation == {"max_new_tokens": 512}
+    # constrained + rp=1.0 matches the validated joint-task research config.
+    assert t.generation == {
+        "max_new_tokens": 512, "constrained": True, "repetition_penalty": 1.0,
+    }
 
 
 def test_unknown_builtin_lists_available():
@@ -236,6 +239,20 @@ def test_generation_top_p_null_allowed(tmp_path: Path):
     p.write_text("generation:\n  top_p: null\nfields:\n  x:\n    type: string\n")
     t = load_task(p)
     assert t.generation == {"top_p": None}
+
+
+def test_generation_constrained_true_accepted(tmp_path: Path):
+    p = tmp_path / "t.yaml"
+    p.write_text("generation:\n  constrained: true\nfields:\n  x:\n    type: string\n")
+    t = load_task(p)
+    assert t.generation == {"constrained": True}
+
+
+def test_generation_constrained_non_bool_rejected(tmp_path: Path):
+    p = tmp_path / "t.yaml"
+    p.write_text('generation:\n  constrained: "yes"\nfields:\n  x:\n    type: string\n')
+    with pytest.raises(SchemaError, match="constrained"):
+        load_task(p)
 
 
 def test_duplicate_top_level_key_raises(tmp_path: Path):

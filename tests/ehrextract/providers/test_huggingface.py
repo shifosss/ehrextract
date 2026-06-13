@@ -178,6 +178,82 @@ def test_trust_remote_code_forwarded_to_tokenizer():
     fp.assert_called_once_with("dummy", trust_remote_code=True)
 
 
+# --- v0.3: constrained decoding wiring (enforcer itself tested in unit/test_constrained.py) ---
+
+_SCHEMA = {
+    "type": "object",
+    "properties": {"x": {"type": "string"}},
+    "required": ["x"],
+    "additionalProperties": False,
+}
+
+
+def test_supports_constrained_attr():
+    assert HuggingFaceProvider.supports_constrained is True
+
+
+def test_constrained_injects_prefix_allowed_tokens_fn():
+    p, model, _ = _provider_with_fakes()
+
+    def sentinel(batch_id, sent):
+        return [1]
+
+    with patch("ehrextract.constrained.get_tokenizer_data", return_value=object()), \
+         patch("ehrextract.constrained.build_prefix_allowed_tokens_fn", return_value=sentinel):
+        p.generate(_MSGS, GenerationConfig(constrained=True), json_schema=_SCHEMA)
+    assert model.gen_kwargs["prefix_allowed_tokens_fn"] is sentinel
+
+
+def test_unconstrained_omits_prefix_allowed_tokens_fn():
+    """v0.2 regression guard: default config leaves generate kwargs untouched."""
+    p, model, _ = _provider_with_fakes()
+    p.generate(_MSGS, GenerationConfig(), json_schema=_SCHEMA)
+    assert "prefix_allowed_tokens_fn" not in model.gen_kwargs
+
+
+def test_constrained_without_json_schema_raises():
+    p, _, _ = _provider_with_fakes()
+    with pytest.raises(ValueError, match="json_schema"):
+        p.generate(_MSGS, GenerationConfig(constrained=True))
+
+
+def test_tokenizer_data_cached_on_provider_instance():
+    p, _, _ = _provider_with_fakes()
+    with patch("ehrextract.constrained.get_tokenizer_data", return_value=object()) as gtd, \
+         patch("ehrextract.constrained.build_prefix_allowed_tokens_fn",
+               return_value=lambda b, s: [1]) as build:
+        p.generate(_MSGS, GenerationConfig(constrained=True), json_schema=_SCHEMA)
+        p.generate(_MSGS, GenerationConfig(constrained=True), json_schema=_SCHEMA)
+    gtd.assert_called_once()
+    assert build.call_count == 2  # fresh enforcer per call, shared tokenizer data
+
+
+@pytest.mark.gpu
+def test_constrained_smoke_tiny_model():
+    """The killer demo: a model too small to reliably emit JSON does so under constraint."""
+    if os.environ.get("RUN_HF_TESTS") != "1":
+        pytest.skip("set RUN_HF_TESTS=1 to run HF integration tests")
+    import json
+
+    from ehrextract.schema import load_task, to_json_schema
+
+    task = load_task("full")
+    p = HuggingFaceProvider(model="HuggingFaceTB/SmolLM2-1.7B-Instruct", dtype="bfloat16")
+    msgs = [
+        {"role": "system", "content": task.prompt},
+        {"role": "user", "content": task.user_template.format(
+            note="Synthetic note: healthy child, eats orally, no feeding tube."
+        )},
+    ]
+    resp = p.generate(
+        msgs,
+        GenerationConfig(max_new_tokens=512, constrained=True),
+        json_schema=to_json_schema(task.schema),
+    )
+    data = json.loads(resp.text)
+    assert set(data) <= set(task.schema.field_names())
+
+
 @pytest.mark.gpu
 def test_smoke_generation_against_tiny_model():
     """End-to-end test on a small model. Gated by gpu marker AND RUN_HF_TESTS=1."""

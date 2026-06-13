@@ -20,6 +20,15 @@ schema-native backend, serialize the structured result to a JSON string).
 `{"input_tokens": ..., "output_tokens": ...}` — it feeds the token columns
 of the results table.
 
+Two **optional** capability members extend the interface; both are checked
+with `getattr(provider, ..., False)`, so providers written against earlier
+versions keep working unchanged:
+
+| Member | Meaning |
+|---|---|
+| `supports_constrained` | `True` declares that `generate` honors `GenerationConfig.constrained` (token-constrained decoding). Without it, a constrained run logs one INFO and proceeds unconstrained. |
+| `supports_batch` + `generate_batch(batch_messages, config, json_schema=None)` | Enables `run(batch=True)`. Receives a list of message lists; must return one entry per input, **in input order**: a `ProviderResponse` for success or an `Exception` instance for a per-request failure (mapped to a `provider_error` row). Batch-level failures should raise, ideally naming the backend's batch/job id. |
+
 ## Example
 
 ```python
@@ -84,7 +93,12 @@ providers always go through `Extractor`.)
   than returning an error row), queued notes are cancelled and the
   exception propagates.
 - Never calls your provider for rows whose note text is null or empty —
-  those become error rows (`finish_reason` `"skipped"`) directly.
+  those become error rows (`finish_reason` `"skipped"`) directly. In batch
+  mode the same applies: empty rows are handled locally and only live rows
+  reach `generate_batch`.
 - Parses and validates `ProviderResponse.text` against the task schema —
   markdown fences and `<think>` blocks are stripped first, so providers
   do not need to clean those up themselves.
+- With `max_repairs > 0`, re-calls `generate()` with the failed output and
+  the field errors appended as extra chat turns (also for rows that failed
+  inside a batch — repairs are always synchronous calls).

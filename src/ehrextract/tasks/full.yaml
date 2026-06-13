@@ -97,6 +97,8 @@ prompt: |
 user_template: "Clinical note: {note}\n\nProvide the classification in JSON format:"
 generation:
   max_new_tokens: 512
+  constrained: true
+  repetition_penalty: 1.0
 fields:
   fsd:
     type: enum

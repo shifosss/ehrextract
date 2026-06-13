@@ -35,7 +35,8 @@ def test_help_lists_top_level_flags():
     assert r.returncode == 0
     for flag in ("--task", "--provider", "--prompt", "--adapter", "--input",
                  "--output", "--ack-egress", "--max-concurrency", "--api-key-env",
-                 "--repetition-penalty", "--trust-remote-code", "--dtype"):
+                 "--repetition-penalty", "--trust-remote-code", "--dtype",
+                 "--constrained", "--no-constrained", "--max-repairs", "--batch"):
         assert flag in r.stdout
     for dtype_choice in ("bfloat16", "float16", "float32"):
         assert dtype_choice in r.stdout
@@ -52,10 +53,10 @@ def test_help_lists_all_three_provider_choices():
     assert "huggingface" in r.stdout
 
 
-def test_version_prints_0_2_0():
+def test_version_prints_0_3_0():
     r = _run(["--version"])
     assert r.returncode == 0
-    assert r.stdout.strip() == __version__ == "0.2.0"
+    assert r.stdout.strip() == __version__ == "0.3.0"
 
 
 def test_missing_required_flags_errors():
@@ -118,6 +119,47 @@ def test_cli_generation_flags_default_to_none(monkeypatch, tmp_path):
     assert captured["generation"] is None
     assert captured["on_egress"] == "warn"
     assert captured["provider"] == "huggingface"
+
+
+def test_cli_constrained_flag_maps(monkeypatch, tmp_path):
+    base = ["--task", "full", "--model", "m",
+            "--input", str(tmp_path / "in.csv"), "--output", str(tmp_path / "out.csv")]
+    captured = _call_main(monkeypatch, [*base, "--constrained"])
+    assert captured["generation"] == {"constrained": True}
+    captured = _call_main(monkeypatch, [*base, "--no-constrained"])
+    assert captured["generation"] == {"constrained": False}  # explicit off beats task default
+    captured = _call_main(monkeypatch, base)
+    assert captured["generation"] is None  # absent flag leaves the task default alone
+
+
+def test_cli_max_repairs_maps(monkeypatch, tmp_path):
+    base = ["--task", "full", "--model", "m",
+            "--input", str(tmp_path / "in.csv"), "--output", str(tmp_path / "out.csv")]
+    captured = _call_main(monkeypatch, [*base, "--max-repairs", "2"])
+    assert captured["max_repairs"] == 2
+    captured = _call_main(monkeypatch, base)
+    assert captured["max_repairs"] == 0
+
+
+def test_cli_batch_flag_maps(monkeypatch, tmp_path):
+    base = ["--task", "full", "--provider", "openai", "--model", "m",
+            "--input", str(tmp_path / "in.csv"), "--output", str(tmp_path / "out.csv")]
+    captured = _call_main(monkeypatch, [*base, "--batch"])
+    assert captured["batch"] is True
+    captured = _call_main(monkeypatch, base)
+    assert captured["batch"] is False
+
+
+def test_cli_batch_with_huggingface_exits_2(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(
+        pipeline_mod, "load_provider", lambda *a, **k: pytest.fail("provider must not be built")
+    )
+    from ehrextract.cli import main
+
+    rc = main(["--task", "full", "--model", "m", "--batch",
+               "--input", str(tmp_path / "in.csv"), "--output", str(tmp_path / "out.csv")])
+    assert rc == 2
+    assert "batch" in capsys.readouterr().err
 
 
 def test_cli_stdin_mode_passes_inline_text(monkeypatch, tmp_path):
